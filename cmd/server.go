@@ -63,6 +63,7 @@ const (
 	GitlabWebhookSecretFlag    = "gitlab-webhook-secret" // nolint: gosec
 	LogLevelFlag               = "log-level"
 	PortFlag                   = "port"
+	PRStatusName               = "pr-status-name"
 	RepoConfigFlag             = "repo-config"
 	RepoConfigJSONFlag         = "repo-config-json"
 	RepoWhitelistFlag          = "repo-whitelist"
@@ -86,6 +87,7 @@ const (
 	DefaultGitlabHostname   = "gitlab.com"
 	DefaultLogLevel         = "info"
 	DefaultPort             = 4141
+	DefaultPRStatusName     = "atlantis"
 	DefaultTFEHostname      = "app.terraform.io"
 )
 
@@ -180,6 +182,10 @@ var stringFlags = map[string]stringFlag{
 	LogLevelFlag: {
 		description:  "Log level. Either debug, info, warn, or error.",
 		defaultValue: DefaultLogLevel,
+	},
+	PRStatusName: {
+		description:  "Name used for updating the pull request status.",
+		defaultValue: DefaultPRStatusName,
 	},
 	RepoConfigFlag: {
 		description: "Path to a repo config file, used to customize how Atlantis runs on each repo. See runatlantis.io/docs for more details.",
@@ -453,6 +459,9 @@ func (s *ServerCmd) setDefaults(c *server.UserConfig) {
 	}
 	if c.Port == 0 {
 		c.Port = DefaultPort
+	}
+	if c.PRStatusName == "" {
+		c.PRStatusName = DefaultPRStatusName
 	}
 	if c.TFEHostname == "" {
 		c.TFEHostname = DefaultTFEHostname

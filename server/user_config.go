@@ -31,6 +31,7 @@ type UserConfig struct {
 	GitlabWebhookSecret        string `mapstructure:"gitlab-webhook-secret"`
 	LogLevel                   string `mapstructure:"log-level"`
 	Port                       int    `mapstructure:"port"`
+	PRStatusName               string `mapstructure:"pr-status-name"`
 	RepoConfig                 string `mapstructure:"repo-config"`
 	RepoConfigJSON             string `mapstructure:"repo-config-json"`
 	RepoWhitelist              string `mapstructure:"repo-whitelist"`

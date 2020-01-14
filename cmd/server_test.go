@@ -387,6 +387,7 @@ func TestExecute_Defaults(t *testing.T) {
 	Equals(t, "", passedConfig.BitbucketWebhookSecret)
 	Equals(t, "info", passedConfig.LogLevel)
 	Equals(t, 4141, passedConfig.Port)
+	Equals(t, "atlantis", passedConfig.PRStatusName)
 	Equals(t, false, passedConfig.RequireApproval)
 	Equals(t, false, passedConfig.RequireMergeable)
 	Equals(t, "", passedConfig.SlackToken)
@@ -671,6 +672,7 @@ gitlab-user: "gitlab-user"
 gitlab-webhook-secret: "gitlab-secret"
 log-level: "debug"
 port: 8181
+pr-status-name: status
 repo-whitelist: "github.com/runatlantis/atlantis"
 require-approval: true
 slack-token: slack-token
@@ -710,6 +712,7 @@ write-git-creds: true
 		"GITLAB_WEBHOOK_SECRET":        "override-gitlab-webhook-secret",
 		"LOG_LEVEL":                    "info",
 		"PORT":                         "8282",
+		"PR_STATUS_NAME":               "override-status-name",
 		"REPO_WHITELIST":               "override,override",
 		"REQUIRE_APPROVAL":             "false",
 		"REQUIRE_MERGEABLE":            "false",
@@ -762,6 +765,7 @@ write-git-creds: true
 	Equals(t, "override-my-hostname", passedConfig.TFEHostname)
 	Equals(t, "override-my-token", passedConfig.TFEToken)
 	Equals(t, false, passedConfig.WriteGitCreds)
+	Equals(t, "override-status-name", passedConfig.PRStatusName)
 }
 
 func TestExecute_FlagConfigOverride(t *testing.T) {
@@ -793,6 +797,7 @@ gitlab-user: "gitlab-user"
 gitlab-webhook-secret: "gitlab-secret"
 log-level: "debug"
 port: 8181
+pr-status-name: status-name
 repo-whitelist: "github.com/runatlantis/atlantis"
 require-approval: true
 require-mergeable: true
@@ -832,6 +837,7 @@ write-git-creds: true
 		cmd.GitlabWebhookSecretFlag:    "override-gitlab-webhook-secret",
 		cmd.LogLevelFlag:               "info",
 		cmd.PortFlag:                   8282,
+		cmd.PRStatusName:               "override-status-name",
 		cmd.RepoWhitelistFlag:          "override,override",
 		cmd.RequireApprovalFlag:        false,
 		cmd.RequireMergeableFlag:       false,
@@ -869,6 +875,7 @@ write-git-creds: true
 	Equals(t, "override-gitlab-webhook-secret", passedConfig.GitlabWebhookSecret)
 	Equals(t, "info", passedConfig.LogLevel)
 	Equals(t, 8282, passedConfig.Port)
+	Equals(t, "override-status-name", passedConfig.PRStatusName)
 	Equals(t, "override,override", passedConfig.RepoWhitelist)
 	Equals(t, false, passedConfig.RequireApproval)
 	Equals(t, false, passedConfig.RequireMergeable)
@@ -911,6 +918,7 @@ func TestExecute_FlagEnvVarOverride(t *testing.T) {
 		"GITLAB_WEBHOOK_SECRET":        "gitlab-webhook-secret",
 		"LOG_LEVEL":                    "debug",
 		"PORT":                         "8181",
+		"PR_STATUS_NAME":               "status-name",
 		"REPO_WHITELIST":               "*",
 		"REQUIRE_APPROVAL":             "true",
 		"REQUIRE_MERGEABLE":            "true",
@@ -958,6 +966,7 @@ func TestExecute_FlagEnvVarOverride(t *testing.T) {
 		cmd.GitlabWebhookSecretFlag:    "override-gitlab-webhook-secret",
 		cmd.LogLevelFlag:               "info",
 		cmd.PortFlag:                   8282,
+		cmd.PRStatusName:               "override-status-name",
 		cmd.RepoWhitelistFlag:          "override,override",
 		cmd.RequireApprovalFlag:        false,
 		cmd.RequireMergeableFlag:       false,
@@ -997,6 +1006,7 @@ func TestExecute_FlagEnvVarOverride(t *testing.T) {
 	Equals(t, "override-gitlab-webhook-secret", passedConfig.GitlabWebhookSecret)
 	Equals(t, "info", passedConfig.LogLevel)
 	Equals(t, 8282, passedConfig.Port)
+	Equals(t, "override-status-name", passedConfig.PRStatusName)
 	Equals(t, "override,override", passedConfig.RepoWhitelist)
 	Equals(t, false, passedConfig.RequireApproval)
 	Equals(t, false, passedConfig.RequireMergeable)

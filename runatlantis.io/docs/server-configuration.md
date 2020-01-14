@@ -288,6 +288,14 @@ Values are chosen in this order:
   ```
   Port to bind to. Defaults to `4141`.
 
+* ### `--pr-status-name`
+  ```bash
+  atlantis server --pr-status-name="atlantis-dev"
+  ```
+  Application name to use when updating a pull request status.
+
+  This is useful when running multiple Atlantis servers against a single repository.
+
 * ### `--repo-config`
   ```bash
   atlantis server --repo-config="path/to/repos.yaml"
@@ -421,7 +429,7 @@ Values are chosen in this order:
   atlantis server --ssl-cert-file="/etc/ssl/private/my-cert.key"
   ```
   File containing x509 private key matching `--ssl-cert-file`.
- 
+
 * ### `--tfe-hostname`
   ```bash
   atlantis server --tfe-hostname="my-terraform-enterprise.company.com"
