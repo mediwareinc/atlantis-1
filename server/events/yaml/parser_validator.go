@@ -17,7 +17,15 @@ import (
 )
 
 // AtlantisYAMLFilename is the name of the config file for each repo.
-const AtlantisYAMLFilename = "atlantis.yaml"
+var AtlantisYAMLFilename string
+
+// Simplest hack to allow overriding "atlantis.yaml" to another name
+func init() {
+	AtlantisYAMLFilename = os.Getenv("ATLANTIS_YAML_FILENAME")
+	if AtlantisYAMLFilename == "" {
+		AtlantisYAMLFilename = "atlantis.yaml"
+	}
+}
 
 // ParserValidator parses and validates server-side repo config files and
 // repo-level atlantis.yaml files.
