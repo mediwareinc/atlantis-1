@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/url"
 	paths "path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -28,6 +29,10 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/runatlantis/atlantis/server/events/yaml/valid"
+)
+
+const (
+	planfileSlashReplace = "::"
 )
 
 // Repo is a VCS repository.
@@ -97,6 +102,7 @@ func NewRepo(vcsHostType VCSHostType, repoFullName string, cloneURL string, vcsU
 
 	// We url encode because we're using them in a URL and weird characters can
 	// mess up git.
+	cloneURL = strings.Replace(cloneURL, " ", "%20", -1)
 	escapedVCSUser := url.QueryEscape(vcsUser)
 	escapedVCSToken := url.QueryEscape(vcsToken)
 	auth := fmt.Sprintf("%s:%s@", escapedVCSUser, escapedVCSToken)
@@ -165,6 +171,13 @@ type PullRequest struct {
 	BaseRepo Repo
 }
 
+// PullRequestOptions is used to set optional paralmeters for PullRequest
+type PullRequestOptions struct {
+	// When DeleteSourceBranchOnMerge flag is set to true VCS deletes the source branch after the PR is merged
+	// Applied by GitLab & AzureDevops
+	DeleteSourceBranchOnMerge bool
+}
+
 type PullRequestState int
 
 const (
@@ -199,6 +212,27 @@ func (p PullRequestEventType) String() string {
 // During an autoplan, the user will be the Atlantis API user.
 type User struct {
 	Username string
+}
+
+// LockMetadata contains additional data provided to the lock
+type LockMetadata struct {
+	UnixTime int64
+}
+
+// CommandLock represents a global lock for an atlantis command (plan, apply, policy_check).
+// It is used to prevent commands from being executed
+type CommandLock struct {
+	// Time is the time at which the lock was first created.
+	LockMetadata LockMetadata
+	CommandName  CommandName
+}
+
+func (l *CommandLock) LockTime() time.Time {
+	return time.Unix(l.LockMetadata.UnixTime, 0)
+}
+
+func (l *CommandLock) IsLocked() bool {
+	return !l.LockTime().IsZero()
 }
 
 // ProjectLock represents a lock on a project.
@@ -299,6 +333,7 @@ func (h VCSHostType) String() string {
 // ProjectCommandContext defines the context for a plan or apply stage that will
 // be executed for a project.
 type ProjectCommandContext struct {
+	CommandName CommandName
 	// ApplyCmd is the command that users should run to apply this plan. If
 	// this is an apply then this will be empty.
 	ApplyCmd string
@@ -312,6 +347,8 @@ type ProjectCommandContext struct {
 	ParallelApplyEnabled bool
 	// ParallelPlanEnabled is true if parallel plan is enabled for this project.
 	ParallelPlanEnabled bool
+	// ParallelPolicyCheckEnabled is true if parallel policy_check is enabled for this project.
+	ParallelPolicyCheckEnabled bool
 	// AutoplanEnabled is true if autoplanning is enabled for this project.
 	AutoplanEnabled bool
 	// BaseRepo is the repository that the pull request will be merged into.
@@ -326,9 +363,11 @@ type ProjectCommandContext struct {
 	// be the same as BaseRepo.
 	HeadRepo Repo
 	// Log is a logger that's been set up for this context.
-	Log *logging.SimpleLogger
+	Log logging.SimpleLogging
 	// PullMergeable is true if the pull request for this project is able to be merged.
 	PullMergeable bool
+	// CurrentProjectPlanStatus is the status of the current project prior to this command.
+	ProjectPlanStatus ProjectPlanStatus
 	// Pull is the pull request we're responding to.
 	Pull PullRequest
 	// ProjectName is the name of the project set in atlantis.yaml. If there was
@@ -356,6 +395,20 @@ type ProjectCommandContext struct {
 	// Workspace is the Terraform workspace this project is in. It will always
 	// be set.
 	Workspace string
+	// PolicySets represent the policies that are run on the plan as part of the
+	// policy check stage
+	PolicySets valid.PolicySets
+	// DeleteSourceBranchOnMerge will attempt to allow a branch to be deleted when merged (AzureDevOps & GitLab Support Only)
+	DeleteSourceBranchOnMerge bool
+}
+
+// GetShowResultFileName returns the filename (not the path) to store the tf show result
+func (p ProjectCommandContext) GetShowResultFileName() string {
+	if p.ProjectName == "" {
+		return fmt.Sprintf("%s.json", p.Workspace)
+	}
+	projName := strings.Replace(p.ProjectName, "/", planfileSlashReplace, -1)
+	return fmt.Sprintf("%s-%s.json", projName, p.Workspace)
 }
 
 // SplitRepoFullName splits a repo full name up into its owner and repo
@@ -373,16 +426,17 @@ func SplitRepoFullName(repoFullName string) (owner string, repo string) {
 	return repoFullName[:lastSlashIdx], repoFullName[lastSlashIdx+1:]
 }
 
-// ProjectResult is the result of executing a plan/apply for a specific project.
+// ProjectResult is the result of executing a plan/policy_check/apply for a specific project.
 type ProjectResult struct {
-	Command      CommandName
-	RepoRelDir   string
-	Workspace    string
-	Error        error
-	Failure      string
-	PlanSuccess  *PlanSuccess
-	ApplySuccess string
-	ProjectName  string
+	Command            CommandName
+	RepoRelDir         string
+	Workspace          string
+	Error              error
+	Failure            string
+	PlanSuccess        *PlanSuccess
+	PolicyCheckSuccess *PolicyCheckSuccess
+	ApplySuccess       string
+	ProjectName        string
 }
 
 // CommitStatus returns the vcs commit status of this project result.
@@ -407,7 +461,13 @@ func (p ProjectResult) PlanStatus() ProjectPlanStatus {
 			return ErroredPlanStatus
 		}
 		return PlannedPlanStatus
-
+	case PolicyCheckCommand, ApprovePoliciesCommand:
+		if p.Error != nil {
+			return ErroredPolicyCheckStatus
+		} else if p.Failure != "" {
+			return ErroredPolicyCheckStatus
+		}
+		return PassedPolicyCheckStatus
 	case ApplyCommand:
 		if p.Error != nil {
 			return ErroredApplyStatus
@@ -422,7 +482,7 @@ func (p ProjectResult) PlanStatus() ProjectPlanStatus {
 
 // IsSuccessful returns true if this project result had no errors.
 func (p ProjectResult) IsSuccessful() bool {
-	return p.PlanSuccess != nil || p.ApplySuccess != ""
+	return p.PlanSuccess != nil || p.PolicyCheckSuccess != nil || p.ApplySuccess != ""
 }
 
 // PlanSuccess is the result of a successful plan.
@@ -430,6 +490,32 @@ type PlanSuccess struct {
 	// TerraformOutput is the output from Terraform of running plan.
 	TerraformOutput string
 	// LockURL is the full URL to the lock held by this plan.
+	LockURL string
+	// RePlanCmd is the command that users should run to re-plan this project.
+	RePlanCmd string
+	// ApplyCmd is the command that users should run to apply this plan.
+	ApplyCmd string
+	// HasDiverged is true if we're using the checkout merge strategy and the
+	// branch we're merging into has been updated since we cloned and merged
+	// it.
+	HasDiverged bool
+}
+
+// Summary extracts one line summary of plan changes from TerraformOutput.
+func (p *PlanSuccess) Summary() string {
+	r := regexp.MustCompile(`Plan: \d+ to add, \d+ to change, \d+ to destroy.`)
+	if match := r.FindString(p.TerraformOutput); match != "" {
+		return match
+	}
+	r = regexp.MustCompile(`No changes. Infrastructure is up-to-date.`)
+	return r.FindString(p.TerraformOutput)
+}
+
+// PolicyCheckSuccess is the result of a successful policy check run.
+type PolicyCheckSuccess struct {
+	// PolicyCheckOutput is the output from policy check binary(conftest|opa)
+	PolicyCheckOutput string
+	// LockURL is the full URL to the lock held by this policy check.
 	LockURL string
 	// RePlanCmd is the command that users should run to re-plan this project.
 	RePlanCmd string
@@ -480,12 +566,21 @@ const (
 	// PlannedPlanStatus means that a plan has been successfully generated but
 	// not yet applied.
 	PlannedPlanStatus
-	// ErrorApplyStatus means that a plan has been generated but there was an
+	// ErroredApplyStatus means that a plan has been generated but there was an
 	// error while applying it.
 	ErroredApplyStatus
 	// AppliedPlanStatus means that a plan has been generated and applied
 	// successfully.
 	AppliedPlanStatus
+	// DiscardedPlanStatus means that there was an unapplied plan that was
+	// discarded due to a project being unlocked
+	DiscardedPlanStatus
+	// ErroredPolicyCheckStatus means that there was an unapplied plan that was
+	// discarded due to a project being unlocked
+	ErroredPolicyCheckStatus
+	// PassedPolicyCheckStatus means that there was an unapplied plan that was
+	// discarded due to a project being unlocked
+	PassedPolicyCheckStatus
 )
 
 // String returns a string representation of the status.
@@ -499,6 +594,12 @@ func (p ProjectPlanStatus) String() string {
 		return "apply_errored"
 	case AppliedPlanStatus:
 		return "applied"
+	case DiscardedPlanStatus:
+		return "plan_discarded"
+	case ErroredPolicyCheckStatus:
+		return "policy_check_errored"
+	case PassedPolicyCheckStatus:
+		return "policy_check_passed"
 	default:
 		panic("missing String() impl for ProjectPlanStatus")
 	}
@@ -512,6 +613,14 @@ const (
 	ApplyCommand CommandName = iota
 	// PlanCommand is a command to run terraform plan.
 	PlanCommand
+	// UnlockCommand is a command to discard previous plans as well as the atlantis locks.
+	UnlockCommand
+	// PolicyCheckCommand is a command to run conftest test.
+	PolicyCheckCommand
+	// ApprovePoliciesCommand is a command to approve policies with owner check
+	ApprovePoliciesCommand
+	// AutoplanCommand is a command to run terrafor plan on PR open/update if autoplan is enabled
+	AutoplanCommand
 	// Adding more? Don't forget to update String() below
 )
 
@@ -520,8 +629,33 @@ func (c CommandName) String() string {
 	switch c {
 	case ApplyCommand:
 		return "apply"
-	case PlanCommand:
+	case PlanCommand, AutoplanCommand:
 		return "plan"
+	case UnlockCommand:
+		return "unlock"
+	case PolicyCheckCommand:
+		return "policy_check"
+	case ApprovePoliciesCommand:
+		return "approve_policies"
 	}
 	return ""
+}
+
+// PreWorkflowHookCommandContext defines the context for a pre_worklfow_hooks that will
+// be executed before workflows.
+type PreWorkflowHookCommandContext struct {
+	// BaseRepo is the repository that the pull request will be merged into.
+	BaseRepo Repo
+	// HeadRepo is the repository that is getting merged into the BaseRepo.
+	// If the pull request branch is from the same repository then HeadRepo will
+	// be the same as BaseRepo.
+	HeadRepo Repo
+	// Log is a logger that's been set up for this context.
+	Log logging.SimpleLogging
+	// Pull is the pull request we're responding to.
+	Pull PullRequest
+	// User is the user that triggered this command.
+	User User
+	// Verbose is true when the user would like verbose output.
+	Verbose bool
 }

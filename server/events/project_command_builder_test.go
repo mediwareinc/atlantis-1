@@ -117,6 +117,8 @@ projects:
 		},
 	}
 
+	logger := logging.NewNoopLogger(t)
+
 	for _, c := range cases {
 		t.Run(c.Description, func(t *testing.T) {
 			RegisterMockTestingT(t)
@@ -126,7 +128,7 @@ projects:
 			defer cleanup()
 
 			workingDir := mocks.NewMockWorkingDir()
-			When(workingDir.Clone(matchers.AnyPtrToLoggingSimpleLogger(), matchers.AnyModelsRepo(), matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest(), AnyString())).ThenReturn(tmpDir, false, nil)
+			When(workingDir.Clone(matchers.AnyPtrToLoggingSimpleLogger(), matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest(), AnyString())).ThenReturn(tmpDir, false, nil)
 			vcsClient := vcsmocks.NewMockClient()
 			When(vcsClient.GetModifiedFiles(matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest())).ThenReturn([]string{"main.tf"}, nil)
 			if c.AtlantisYAML != "" {
@@ -134,19 +136,24 @@ projects:
 				Ok(t, err)
 			}
 
-			builder := &events.DefaultProjectCommandBuilder{
-				WorkingDirLocker:  events.NewDefaultWorkingDirLocker(),
-				WorkingDir:        workingDir,
-				ParserValidator:   &yaml.ParserValidator{},
-				VCSClient:         vcsClient,
-				ProjectFinder:     &events.DefaultProjectFinder{},
-				PendingPlanFinder: &events.DefaultPendingPlanFinder{},
-				CommentBuilder:    &events.CommentParser{},
-				GlobalCfg:         valid.NewGlobalCfg(false, false, false),
-			}
+			builder := events.NewProjectCommandBuilder(
+				false,
+				&yaml.ParserValidator{},
+				&events.DefaultProjectFinder{},
+				vcsClient,
+				workingDir,
+				events.NewDefaultWorkingDirLocker(),
+				valid.NewGlobalCfg(false, false, false),
+				&events.DefaultPendingPlanFinder{},
+				&events.CommentParser{},
+				false,
+				false,
+				"**/*.tf,**/*.tfvars,**/*.tfvars.json,**/terragrunt.hcl",
+			)
 
 			ctxs, err := builder.BuildAutoplanCommands(&events.CommandContext{
 				PullMergeable: true,
+				Log:           logger,
 			})
 			Ok(t, err)
 			Equals(t, len(c.exp), len(ctxs))
@@ -337,6 +344,8 @@ projects:
 		},
 	}
 
+	logger := logging.NewNoopLogger(t)
+
 	for _, c := range cases {
 		// NOTE: we're testing both plan and apply here.
 		for _, cmdName := range []models.CommandName{models.PlanCommand, models.ApplyCommand} {
@@ -348,7 +357,7 @@ projects:
 				defer cleanup()
 
 				workingDir := mocks.NewMockWorkingDir()
-				When(workingDir.Clone(matchers.AnyPtrToLoggingSimpleLogger(), matchers.AnyModelsRepo(), matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest(), AnyString())).ThenReturn(tmpDir, false, nil)
+				When(workingDir.Clone(matchers.AnyPtrToLoggingSimpleLogger(), matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest(), AnyString())).ThenReturn(tmpDir, false, nil)
 				When(workingDir.GetWorkingDir(matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest(), AnyString())).ThenReturn(tmpDir, nil)
 				vcsClient := vcsmocks.NewMockClient()
 				When(vcsClient.GetModifiedFiles(matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest())).ThenReturn([]string{"main.tf"}, nil)
@@ -357,22 +366,29 @@ projects:
 					Ok(t, err)
 				}
 
-				builder := &events.DefaultProjectCommandBuilder{
-					WorkingDirLocker: events.NewDefaultWorkingDirLocker(),
-					WorkingDir:       workingDir,
-					ParserValidator:  &yaml.ParserValidator{},
-					VCSClient:        vcsClient,
-					ProjectFinder:    &events.DefaultProjectFinder{},
-					CommentBuilder:   &events.CommentParser{},
-					GlobalCfg:        valid.NewGlobalCfg(true, false, false),
-				}
+				builder := events.NewProjectCommandBuilder(
+					false,
+					&yaml.ParserValidator{},
+					&events.DefaultProjectFinder{},
+					vcsClient,
+					workingDir,
+					events.NewDefaultWorkingDirLocker(),
+					valid.NewGlobalCfg(true, false, false),
+					&events.DefaultPendingPlanFinder{},
+					&events.CommentParser{},
+					false,
+					true,
+					"**/*.tf,**/*.tfvars,**/*.tfvars.json,**/terragrunt.hcl",
+				)
 
 				var actCtxs []models.ProjectCommandContext
 				var err error
 				if cmdName == models.PlanCommand {
-					actCtxs, err = builder.BuildPlanCommands(&events.CommandContext{}, &c.Cmd)
+					actCtxs, err = builder.BuildPlanCommands(&events.CommandContext{
+						Log: logger,
+					}, &c.Cmd)
 				} else {
-					actCtxs, err = builder.BuildApplyCommands(&events.CommandContext{}, &c.Cmd)
+					actCtxs, err = builder.BuildApplyCommands(&events.CommandContext{Log: logger}, &c.Cmd)
 				}
 
 				if c.ExpErr != "" {
@@ -474,6 +490,8 @@ projects:
 			},
 		},
 	}
+
+	logger := logging.NewNoopLogger(t)
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			RegisterMockTestingT(t)
@@ -481,7 +499,7 @@ projects:
 			defer cleanup()
 
 			workingDir := mocks.NewMockWorkingDir()
-			When(workingDir.Clone(matchers.AnyPtrToLoggingSimpleLogger(), matchers.AnyModelsRepo(), matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest(), AnyString())).ThenReturn(tmpDir, false, nil)
+			When(workingDir.Clone(matchers.AnyPtrToLoggingSimpleLogger(), matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest(), AnyString())).ThenReturn(tmpDir, false, nil)
 			When(workingDir.GetWorkingDir(matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest(), AnyString())).ThenReturn(tmpDir, nil)
 			vcsClient := vcsmocks.NewMockClient()
 			When(vcsClient.GetModifiedFiles(matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest())).ThenReturn(c.ModifiedFiles, nil)
@@ -490,18 +508,25 @@ projects:
 				Ok(t, err)
 			}
 
-			builder := &events.DefaultProjectCommandBuilder{
-				WorkingDirLocker: events.NewDefaultWorkingDirLocker(),
-				WorkingDir:       workingDir,
-				ParserValidator:  &yaml.ParserValidator{},
-				VCSClient:        vcsClient,
-				ProjectFinder:    &events.DefaultProjectFinder{},
-				CommentBuilder:   &events.CommentParser{},
-				GlobalCfg:        valid.NewGlobalCfg(true, false, false),
-			}
+			builder := events.NewProjectCommandBuilder(
+				false,
+				&yaml.ParserValidator{},
+				&events.DefaultProjectFinder{},
+				vcsClient,
+				workingDir,
+				events.NewDefaultWorkingDirLocker(),
+				valid.NewGlobalCfg(true, false, false),
+				&events.DefaultPendingPlanFinder{},
+				&events.CommentParser{},
+				false,
+				false,
+				"**/*.tf,**/*.tfvars,**/*.tfvars.json,**/terragrunt.hcl",
+			)
 
 			ctxs, err := builder.BuildPlanCommands(
-				&events.CommandContext{},
+				&events.CommandContext{
+					Log: logger,
+				},
 				&events.CommentCommand{
 					RepoRelDir:  "",
 					Flags:       nil,
@@ -561,19 +586,27 @@ func TestDefaultProjectCommandBuilder_BuildMultiApply(t *testing.T) {
 		matchers.AnyModelsPullRequest())).
 		ThenReturn(tmpDir, nil)
 
-	builder := &events.DefaultProjectCommandBuilder{
-		WorkingDirLocker:  events.NewDefaultWorkingDirLocker(),
-		WorkingDir:        workingDir,
-		ParserValidator:   &yaml.ParserValidator{},
-		VCSClient:         nil,
-		ProjectFinder:     &events.DefaultProjectFinder{},
-		PendingPlanFinder: &events.DefaultPendingPlanFinder{},
-		CommentBuilder:    &events.CommentParser{},
-		GlobalCfg:         valid.NewGlobalCfg(false, false, false),
-	}
+	logger := logging.NewNoopLogger(t)
+
+	builder := events.NewProjectCommandBuilder(
+		false,
+		&yaml.ParserValidator{},
+		&events.DefaultProjectFinder{},
+		nil,
+		workingDir,
+		events.NewDefaultWorkingDirLocker(),
+		valid.NewGlobalCfg(false, false, false),
+		&events.DefaultPendingPlanFinder{},
+		&events.CommentParser{},
+		false,
+		false,
+		"**/*.tf,**/*.tfvars,**/*.tfvars.json,**/terragrunt.hcl",
+	)
 
 	ctxs, err := builder.BuildApplyCommands(
-		&events.CommandContext{},
+		&events.CommandContext{
+			Log: logger,
+		},
 		&events.CommentCommand{
 			RepoRelDir:  "",
 			Flags:       nil,
@@ -621,7 +654,6 @@ projects:
 	When(workingDir.Clone(
 		matchers.AnyPtrToLoggingSimpleLogger(),
 		matchers.AnyModelsRepo(),
-		matchers.AnyModelsRepo(),
 		matchers.AnyModelsPullRequest(),
 		AnyString())).ThenReturn(repoDir, false, nil)
 	When(workingDir.GetWorkingDir(
@@ -629,22 +661,26 @@ projects:
 		matchers.AnyModelsPullRequest(),
 		AnyString())).ThenReturn(repoDir, nil)
 
-	builder := &events.DefaultProjectCommandBuilder{
-		WorkingDirLocker: events.NewDefaultWorkingDirLocker(),
-		WorkingDir:       workingDir,
-		ParserValidator:  &yaml.ParserValidator{},
-		VCSClient:        nil,
-		ProjectFinder:    &events.DefaultProjectFinder{},
-		CommentBuilder:   &events.CommentParser{},
-		GlobalCfg:        valid.NewGlobalCfg(true, false, false),
-	}
+	builder := events.NewProjectCommandBuilder(
+		false,
+		&yaml.ParserValidator{},
+		&events.DefaultProjectFinder{},
+		nil,
+		workingDir,
+		events.NewDefaultWorkingDirLocker(),
+		valid.NewGlobalCfg(true, false, false),
+		&events.DefaultPendingPlanFinder{},
+		&events.CommentParser{},
+		false,
+		false,
+		"**/*.tf,**/*.tfvars,**/*.tfvars.json,**/terragrunt.hcl",
+	)
 
 	ctx := &events.CommandContext{
-		BaseRepo: models.Repo{},
 		HeadRepo: models.Repo{},
 		Pull:     models.PullRequest{},
 		User:     models.User{},
-		Log:      logging.NewNoopLogger(),
+		Log:      logging.NewNoopLogger(t),
 	}
 	_, err = builder.BuildPlanCommands(ctx, &events.CommentCommand{
 		RepoRelDir:  ".",
@@ -677,6 +713,8 @@ func TestDefaultProjectCommandBuilder_EscapeArgs(t *testing.T) {
 		},
 	}
 
+	logger := logging.NewNoopLogger(t)
+
 	for _, c := range cases {
 		t.Run(strings.Join(c.ExtraArgs, " "), func(t *testing.T) {
 			RegisterMockTestingT(t)
@@ -686,24 +724,31 @@ func TestDefaultProjectCommandBuilder_EscapeArgs(t *testing.T) {
 			defer cleanup()
 
 			workingDir := mocks.NewMockWorkingDir()
-			When(workingDir.Clone(matchers.AnyPtrToLoggingSimpleLogger(), matchers.AnyModelsRepo(), matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest(), AnyString())).ThenReturn(tmpDir, false, nil)
+			When(workingDir.Clone(matchers.AnyPtrToLoggingSimpleLogger(), matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest(), AnyString())).ThenReturn(tmpDir, false, nil)
 			When(workingDir.GetWorkingDir(matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest(), AnyString())).ThenReturn(tmpDir, nil)
 			vcsClient := vcsmocks.NewMockClient()
 			When(vcsClient.GetModifiedFiles(matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest())).ThenReturn([]string{"main.tf"}, nil)
 
-			builder := &events.DefaultProjectCommandBuilder{
-				WorkingDirLocker: events.NewDefaultWorkingDirLocker(),
-				WorkingDir:       workingDir,
-				ParserValidator:  &yaml.ParserValidator{},
-				VCSClient:        vcsClient,
-				ProjectFinder:    &events.DefaultProjectFinder{},
-				CommentBuilder:   &events.CommentParser{},
-				GlobalCfg:        valid.NewGlobalCfg(true, false, false),
-			}
+			builder := events.NewProjectCommandBuilder(
+				false,
+				&yaml.ParserValidator{},
+				&events.DefaultProjectFinder{},
+				vcsClient,
+				workingDir,
+				events.NewDefaultWorkingDirLocker(),
+				valid.NewGlobalCfg(true, false, false),
+				&events.DefaultPendingPlanFinder{},
+				&events.CommentParser{},
+				false,
+				false,
+				"**/*.tf,**/*.tfvars,**/*.tfvars.json,**/terragrunt.hcl",
+			)
 
 			var actCtxs []models.ProjectCommandContext
 			var err error
-			actCtxs, err = builder.BuildPlanCommands(&events.CommandContext{}, &events.CommentCommand{
+			actCtxs, err = builder.BuildPlanCommands(&events.CommandContext{
+				Log: logger,
+			}, &events.CommentCommand{
 				RepoRelDir: ".",
 				Flags:      c.ExtraArgs,
 				Name:       models.PlanCommand,
@@ -832,6 +877,8 @@ projects:
 		},
 	}
 
+	logger := logging.NewNoopLogger(t)
+
 	for name, testCase := range testCases {
 		t.Run(name, func(t *testing.T) {
 			RegisterMockTestingT(t)
@@ -846,7 +893,6 @@ projects:
 			When(workingDir.Clone(
 				matchers.AnyPtrToLoggingSimpleLogger(),
 				matchers.AnyModelsRepo(),
-				matchers.AnyModelsRepo(),
 				matchers.AnyModelsPullRequest(),
 				AnyString())).ThenReturn(tmpDir, false, nil)
 
@@ -855,18 +901,25 @@ projects:
 				matchers.AnyModelsPullRequest(),
 				AnyString())).ThenReturn(tmpDir, nil)
 
-			builder := &events.DefaultProjectCommandBuilder{
-				WorkingDirLocker: events.NewDefaultWorkingDirLocker(),
-				WorkingDir:       workingDir,
-				VCSClient:        vcsClient,
-				ParserValidator:  &yaml.ParserValidator{},
-				ProjectFinder:    &events.DefaultProjectFinder{},
-				CommentBuilder:   &events.CommentParser{},
-				GlobalCfg:        valid.NewGlobalCfg(true, false, false),
-			}
+			builder := events.NewProjectCommandBuilder(
+				false,
+				&yaml.ParserValidator{},
+				&events.DefaultProjectFinder{},
+				vcsClient,
+				workingDir,
+				events.NewDefaultWorkingDirLocker(),
+				valid.NewGlobalCfg(true, false, false),
+				&events.DefaultPendingPlanFinder{},
+				&events.CommentParser{},
+				false,
+				false,
+				"**/*.tf,**/*.tfvars,**/*.tfvars.json,**/terragrunt.hcl",
+			)
 
 			actCtxs, err := builder.BuildPlanCommands(
-				&events.CommandContext{},
+				&events.CommandContext{
+					Log: logger,
+				},
 				&events.CommentCommand{
 					RepoRelDir: "",
 					Flags:      nil,
@@ -886,4 +939,94 @@ projects:
 			}
 		})
 	}
+}
+
+// Test that we don't clone the repo if there were no changes based on the atlantis.yaml file.
+func TestDefaultProjectCommandBuilder_SkipCloneNoChanges(t *testing.T) {
+	atlantisYAML := `
+version: 3
+projects:
+- dir: dir1`
+
+	RegisterMockTestingT(t)
+	vcsClient := vcsmocks.NewMockClient()
+	When(vcsClient.GetModifiedFiles(matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest())).ThenReturn([]string{"main.tf"}, nil)
+	When(vcsClient.SupportsSingleFileDownload(matchers.AnyModelsRepo())).ThenReturn(true)
+	When(vcsClient.DownloadRepoConfigFile(matchers.AnyModelsPullRequest())).ThenReturn(true, []byte(atlantisYAML), nil)
+	workingDir := mocks.NewMockWorkingDir()
+
+	logger := logging.NewNoopLogger(t)
+
+	builder := events.NewProjectCommandBuilder(
+		false,
+		&yaml.ParserValidator{},
+		&events.DefaultProjectFinder{},
+		vcsClient,
+		workingDir,
+		events.NewDefaultWorkingDirLocker(),
+		valid.NewGlobalCfg(true, false, false),
+		&events.DefaultPendingPlanFinder{},
+		&events.CommentParser{},
+		true,
+		false,
+		"**/*.tf,**/*.tfvars,**/*.tfvars.json,**/terragrunt.hcl",
+	)
+
+	var actCtxs []models.ProjectCommandContext
+	var err error
+	actCtxs, err = builder.BuildAutoplanCommands(&events.CommandContext{
+		HeadRepo:      models.Repo{},
+		Pull:          models.PullRequest{},
+		User:          models.User{},
+		Log:           logger,
+		PullMergeable: true,
+	})
+	Ok(t, err)
+	Equals(t, 0, len(actCtxs))
+	workingDir.VerifyWasCalled(Never()).Clone(matchers.AnyPtrToLoggingSimpleLogger(), matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest(), AnyString())
+}
+
+func TestDefaultProjectCommandBuilder_WithPolicyCheckEnabled_BuildAutoplanCommand(t *testing.T) {
+	RegisterMockTestingT(t)
+	tmpDir, cleanup := DirStructure(t, map[string]interface{}{
+		"main.tf": nil,
+	})
+	defer cleanup()
+
+	logger := logging.NewNoopLogger(t)
+
+	workingDir := mocks.NewMockWorkingDir()
+	When(workingDir.Clone(matchers.AnyPtrToLoggingSimpleLogger(), matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest(), AnyString())).ThenReturn(tmpDir, false, nil)
+	vcsClient := vcsmocks.NewMockClient()
+	When(vcsClient.GetModifiedFiles(matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest())).ThenReturn([]string{"main.tf"}, nil)
+	globalCfg := valid.NewGlobalCfg(false, false, false)
+
+	builder := events.NewProjectCommandBuilder(
+		true,
+		&yaml.ParserValidator{},
+		&events.DefaultProjectFinder{},
+		vcsClient,
+		workingDir,
+		events.NewDefaultWorkingDirLocker(),
+		globalCfg,
+		&events.DefaultPendingPlanFinder{},
+		&events.CommentParser{},
+		false,
+		false,
+		"**/*.tf,**/*.tfvars,**/*.tfvars.json,**/terragrunt.hcl",
+	)
+
+	ctxs, err := builder.BuildAutoplanCommands(&events.CommandContext{
+		PullMergeable: true,
+		Log:           logger,
+	})
+
+	Ok(t, err)
+	Equals(t, 2, len(ctxs))
+	planCtx := ctxs[0]
+	policyCheckCtx := ctxs[1]
+	Equals(t, models.PlanCommand, planCtx.CommandName)
+	Equals(t, globalCfg.Workflows["default"].Plan.Steps, planCtx.Steps)
+	Equals(t, models.PolicyCheckCommand, policyCheckCtx.CommandName)
+	Equals(t, globalCfg.Workflows["default"].PolicyCheck.Steps, policyCheckCtx.Steps)
 }

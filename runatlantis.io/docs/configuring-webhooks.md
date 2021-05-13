@@ -18,6 +18,8 @@ If only some of the repos in your organization are to be managed by Atlantis, th
 may want to only install on specific repos for now.
 :::
 
+When authenticating as a Github App, Webhooks are automatically created and need no additional setup, beyond being installed to your organization/user account after creation. Refer to the [Github App setup](access-credentials.html#github-app) section for instructions on how to do so.
+
 If you're installing on the organization, navigate to your organization's page and click **Settings**.
 If installing on a single repository, navigate to the repository home page and click **Settings**.
 - Select **Webhooks** or **Hooks** in the sidebar
@@ -39,7 +41,7 @@ If installing on a single repository, navigate to the repository home page and c
 
 ## GitLab
 If you're using GitLab, navigate to your project's home page in GitLab
-- Click **Settings > Integrations** in the sidebar
+- Click **Settings > Webooks** in the sidebar
 - set **URL** to `http://$URL/events` (or `https://$URL/events` if you're using SSL) where `$URL` is where Atlantis is hosted. **Be sure to add `/events`**
 - double-check you added `/events` to the end of your URL.
 - set **Secret Token** to the Webhook Secret you generated previously
@@ -115,8 +117,6 @@ Repeat the process above until you have webhook subscriptions for the following 
 
 - See [Next Steps](#next-steps)
 
-## GitLab
-If you're using GitLab, navigate to your project's home page in GitLab
 ## Next Steps
 * To verify that Atlantis is receiving your webhooks, create a test pull request
   to your repo. 

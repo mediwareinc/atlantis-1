@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 // Modified hereafter by contributors to runatlantis/atlantis.
-
 package events
 
 import (
@@ -18,11 +17,20 @@ import (
 	"github.com/runatlantis/atlantis/server/logging"
 )
 
+// CommandTrigger represents the how the command was triggered
+type CommandTrigger int
+
+const (
+	// Commands that are automatically triggered (ie. automatic plans)
+	Auto CommandTrigger = iota
+
+	// Commands that are triggered by comments (ie. atlantis plan)
+	Comment
+)
+
 // CommandContext represents the context of a command that should be executed
 // for a pull request.
 type CommandContext struct {
-	// BaseRepo is the repository that the pull request will be merged into.
-	BaseRepo models.Repo
 	// HeadRepo is the repository that is getting merged into the BaseRepo.
 	// If the pull request branch is from the same repository then HeadRepo will
 	// be the same as BaseRepo.
@@ -31,10 +39,14 @@ type CommandContext struct {
 	Pull     models.PullRequest
 	// User is the user that triggered this command.
 	User models.User
-	Log  *logging.SimpleLogger
+	Log  logging.SimpleLogging
 	// PullMergeable is true if Pull is able to be merged. This is available in
 	// the CommandContext because we want to collect this information before we
 	// set our own build statuses which can affect mergeability if users have
 	// required the Atlantis status to be successful prior to merging.
 	PullMergeable bool
+
+	PullStatus *models.PullStatus
+
+	Trigger CommandTrigger
 }

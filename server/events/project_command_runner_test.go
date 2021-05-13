@@ -61,7 +61,6 @@ func TestDefaultProjectCommandRunner_Plan(t *testing.T) {
 	When(mockWorkingDir.Clone(
 		matchers.AnyPtrToLoggingSimpleLogger(),
 		matchers.AnyModelsRepo(),
-		matchers.AnyModelsRepo(),
 		matchers.AnyModelsPullRequest(),
 		AnyString(),
 	)).ThenReturn(repoDir, false, nil)
@@ -80,7 +79,7 @@ func TestDefaultProjectCommandRunner_Plan(t *testing.T) {
 		"name": "value",
 	}
 	ctx := models.ProjectCommandContext{
-		Log: logging.NewNoopLogger(),
+		Log: logging.NewNoopLogger(t),
 		Steps: []valid.Step{
 			{
 				StepName:    "env",
@@ -299,7 +298,7 @@ func TestDefaultProjectCommandRunner_Apply(t *testing.T) {
 			)).ThenReturn(repoDir, nil)
 
 			ctx := models.ProjectCommandContext{
-				Log:               logging.NewNoopLogger(),
+				Log:               logging.NewNoopLogger(t),
 				Steps:             c.steps,
 				Workspace:         "default",
 				ApplyRequirements: c.applyReqs,
@@ -373,7 +372,6 @@ func TestDefaultProjectCommandRunner_RunEnvSteps(t *testing.T) {
 	When(mockWorkingDir.Clone(
 		matchers.AnyPtrToLoggingSimpleLogger(),
 		matchers.AnyModelsRepo(),
-		matchers.AnyModelsRepo(),
 		matchers.AnyModelsPullRequest(),
 		AnyString(),
 	)).ThenReturn(repoDir, false, nil)
@@ -389,7 +387,7 @@ func TestDefaultProjectCommandRunner_RunEnvSteps(t *testing.T) {
 	}, nil)
 
 	ctx := models.ProjectCommandContext{
-		Log: logging.NewNoopLogger(),
+		Log: logging.NewNoopLogger(t),
 		Steps: []valid.Step{
 			{
 				StepName:   "run",

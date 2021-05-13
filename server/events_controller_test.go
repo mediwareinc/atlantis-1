@@ -182,20 +182,20 @@ func TestPost_GithubCommentInvalidCommand(t *testing.T) {
 	responseContains(t, w, http.StatusOK, "Ignoring non-command comment: \"\"")
 }
 
-func TestPost_GitlabCommentNotWhitelisted(t *testing.T) {
-	t.Log("when the event is a gitlab comment from a repo that isn't whitelisted we comment with an error")
+func TestPost_GitlabCommentNotAllowlisted(t *testing.T) {
+	t.Log("when the event is a gitlab comment from a repo that isn't allowlisted we comment with an error")
 	RegisterMockTestingT(t)
 	vcsClient := vcsmocks.NewMockClient()
 	e := server.EventsController{
-		Logger:                       logging.NewNoopLogger(),
+		Logger:                       logging.NewNoopLogger(t),
 		CommentParser:                &events.CommentParser{},
 		GitlabRequestParserValidator: &server.DefaultGitlabRequestParserValidator{},
 		Parser:                       &events.EventParser{},
 		SupportedVCSHosts:            []models.VCSHostType{models.Gitlab},
-		RepoWhitelistChecker:         &events.RepoWhitelistChecker{},
+		RepoAllowlistChecker:         &events.RepoAllowlistChecker{},
 		VCSClient:                    vcsClient,
 	}
-	requestJSON, err := ioutil.ReadFile(filepath.Join("testfixtures", "gitlabMergeCommentEvent_notWhitelisted.json"))
+	requestJSON, err := ioutil.ReadFile(filepath.Join("testfixtures", "gitlabMergeCommentEvent_notAllowlisted.json"))
 	Ok(t, err)
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(requestJSON))
 	req.Header.Set(gitlabHeader, "Note Hook")
@@ -204,27 +204,27 @@ func TestPost_GitlabCommentNotWhitelisted(t *testing.T) {
 
 	Equals(t, http.StatusForbidden, w.Result().StatusCode)
 	body, _ := ioutil.ReadAll(w.Result().Body)
-	exp := "Repo not whitelisted"
+	exp := "Repo not allowlisted"
 	Assert(t, strings.Contains(string(body), exp), "exp %q to be contained in %q", exp, string(body))
 	expRepo, _ := models.NewRepo(models.Gitlab, "gitlabhq/gitlab-test", "https://example.com/gitlabhq/gitlab-test.git", "", "")
-	vcsClient.VerifyWasCalledOnce().CreateComment(expRepo, 1, "```\nError: This repo is not whitelisted for Atlantis.\n```")
+	vcsClient.VerifyWasCalledOnce().CreateComment(expRepo, 1, "```\nError: This repo is not allowlisted for Atlantis.\n```", "")
 }
 
-func TestPost_GitlabCommentNotWhitelistedWithSilenceErrors(t *testing.T) {
-	t.Log("when the event is a gitlab comment from a repo that isn't whitelisted and we are silencing errors, do not comment with an error")
+func TestPost_GitlabCommentNotAllowlistedWithSilenceErrors(t *testing.T) {
+	t.Log("when the event is a gitlab comment from a repo that isn't allowlisted and we are silencing errors, do not comment with an error")
 	RegisterMockTestingT(t)
 	vcsClient := vcsmocks.NewMockClient()
 	e := server.EventsController{
-		Logger:                       logging.NewNoopLogger(),
+		Logger:                       logging.NewNoopLogger(t),
 		CommentParser:                &events.CommentParser{},
 		GitlabRequestParserValidator: &server.DefaultGitlabRequestParserValidator{},
 		Parser:                       &events.EventParser{},
 		SupportedVCSHosts:            []models.VCSHostType{models.Gitlab},
-		RepoWhitelistChecker:         &events.RepoWhitelistChecker{},
+		RepoAllowlistChecker:         &events.RepoAllowlistChecker{},
 		VCSClient:                    vcsClient,
-		SilenceWhitelistErrors:       true,
+		SilenceAllowlistErrors:       true,
 	}
-	requestJSON, err := ioutil.ReadFile(filepath.Join("testfixtures", "gitlabMergeCommentEvent_notWhitelisted.json"))
+	requestJSON, err := ioutil.ReadFile(filepath.Join("testfixtures", "gitlabMergeCommentEvent_notAllowlisted.json"))
 	Ok(t, err)
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(requestJSON))
 	req.Header.Set(gitlabHeader, "Note Hook")
@@ -233,26 +233,26 @@ func TestPost_GitlabCommentNotWhitelistedWithSilenceErrors(t *testing.T) {
 
 	Equals(t, http.StatusForbidden, w.Result().StatusCode)
 	body, _ := ioutil.ReadAll(w.Result().Body)
-	exp := "Repo not whitelisted"
+	exp := "Repo not allowlisted"
 	Assert(t, strings.Contains(string(body), exp), "exp %q to be contained in %q", exp, string(body))
-	vcsClient.VerifyWasCalled(Never()).CreateComment(matchers.AnyModelsRepo(), AnyInt(), AnyString())
+	vcsClient.VerifyWasCalled(Never()).CreateComment(matchers.AnyModelsRepo(), AnyInt(), AnyString(), AnyString())
 
 }
 
-func TestPost_GithubCommentNotWhitelisted(t *testing.T) {
-	t.Log("when the event is a github comment from a repo that isn't whitelisted we comment with an error")
+func TestPost_GithubCommentNotAllowlisted(t *testing.T) {
+	t.Log("when the event is a github comment from a repo that isn't allowlisted we comment with an error")
 	RegisterMockTestingT(t)
 	vcsClient := vcsmocks.NewMockClient()
 	e := server.EventsController{
-		Logger:                 logging.NewNoopLogger(),
+		Logger:                 logging.NewNoopLogger(t),
 		GithubRequestValidator: &server.DefaultGithubRequestValidator{},
 		CommentParser:          &events.CommentParser{},
 		Parser:                 &events.EventParser{},
 		SupportedVCSHosts:      []models.VCSHostType{models.Github},
-		RepoWhitelistChecker:   &events.RepoWhitelistChecker{},
+		RepoAllowlistChecker:   &events.RepoAllowlistChecker{},
 		VCSClient:              vcsClient,
 	}
-	requestJSON, err := ioutil.ReadFile(filepath.Join("testfixtures", "githubIssueCommentEvent_notWhitelisted.json"))
+	requestJSON, err := ioutil.ReadFile(filepath.Join("testfixtures", "githubIssueCommentEvent_notAllowlisted.json"))
 	Ok(t, err)
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(requestJSON))
 	req.Header.Set("Content-Type", "application/json")
@@ -262,27 +262,27 @@ func TestPost_GithubCommentNotWhitelisted(t *testing.T) {
 
 	Equals(t, http.StatusForbidden, w.Result().StatusCode)
 	body, _ := ioutil.ReadAll(w.Result().Body)
-	exp := "Repo not whitelisted"
+	exp := "Repo not allowlisted"
 	Assert(t, strings.Contains(string(body), exp), "exp %q to be contained in %q", exp, string(body))
 	expRepo, _ := models.NewRepo(models.Github, "baxterthehacker/public-repo", "https://github.com/baxterthehacker/public-repo.git", "", "")
-	vcsClient.VerifyWasCalledOnce().CreateComment(expRepo, 2, "```\nError: This repo is not whitelisted for Atlantis.\n```")
+	vcsClient.VerifyWasCalledOnce().CreateComment(expRepo, 2, "```\nError: This repo is not allowlisted for Atlantis.\n```", "")
 }
 
-func TestPost_GithubCommentNotWhitelistedWithSilenceErrors(t *testing.T) {
-	t.Log("when the event is a github comment from a repo that isn't whitelisted and we are silencing errors, do not comment with an error")
+func TestPost_GithubCommentNotAllowlistedWithSilenceErrors(t *testing.T) {
+	t.Log("when the event is a github comment from a repo that isn't allowlisted and we are silencing errors, do not comment with an error")
 	RegisterMockTestingT(t)
 	vcsClient := vcsmocks.NewMockClient()
 	e := server.EventsController{
-		Logger:                 logging.NewNoopLogger(),
+		Logger:                 logging.NewNoopLogger(t),
 		GithubRequestValidator: &server.DefaultGithubRequestValidator{},
 		CommentParser:          &events.CommentParser{},
 		Parser:                 &events.EventParser{},
 		SupportedVCSHosts:      []models.VCSHostType{models.Github},
-		RepoWhitelistChecker:   &events.RepoWhitelistChecker{},
+		RepoAllowlistChecker:   &events.RepoAllowlistChecker{},
 		VCSClient:              vcsClient,
-		SilenceWhitelistErrors: true,
+		SilenceAllowlistErrors: true,
 	}
-	requestJSON, err := ioutil.ReadFile(filepath.Join("testfixtures", "githubIssueCommentEvent_notWhitelisted.json"))
+	requestJSON, err := ioutil.ReadFile(filepath.Join("testfixtures", "githubIssueCommentEvent_notAllowlisted.json"))
 	Ok(t, err)
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(requestJSON))
 	req.Header.Set("Content-Type", "application/json")
@@ -292,9 +292,9 @@ func TestPost_GithubCommentNotWhitelistedWithSilenceErrors(t *testing.T) {
 
 	Equals(t, http.StatusForbidden, w.Result().StatusCode)
 	body, _ := ioutil.ReadAll(w.Result().Body)
-	exp := "Repo not whitelisted"
+	exp := "Repo not allowlisted"
 	Assert(t, strings.Contains(string(body), exp), "exp %q to be contained in %q", exp, string(body))
-	vcsClient.VerifyWasCalled(Never()).CreateComment(matchers.AnyModelsRepo(), AnyInt(), AnyString())
+	vcsClient.VerifyWasCalled(Never()).CreateComment(matchers.AnyModelsRepo(), AnyInt(), AnyString(), AnyString())
 }
 
 func TestPost_GitlabCommentResponse(t *testing.T) {
@@ -306,7 +306,7 @@ func TestPost_GitlabCommentResponse(t *testing.T) {
 	When(cp.Parse("", models.Gitlab)).ThenReturn(events.CommentParseResult{CommentResponse: "a comment"})
 	w := httptest.NewRecorder()
 	e.Post(w, req)
-	vcsClient.VerifyWasCalledOnce().CreateComment(models.Repo{}, 0, "a comment")
+	vcsClient.VerifyWasCalledOnce().CreateComment(models.Repo{}, 0, "a comment", "")
 	responseContains(t, w, http.StatusOK, "Commenting back on pull request")
 }
 
@@ -324,7 +324,7 @@ func TestPost_GithubCommentResponse(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	e.Post(w, req)
-	vcsClient.VerifyWasCalledOnce().CreateComment(baseRepo, 1, "a comment")
+	vcsClient.VerifyWasCalledOnce().CreateComment(baseRepo, 1, "a comment", "")
 	responseContains(t, w, http.StatusOK, "Commenting back on pull request")
 }
 
@@ -388,11 +388,11 @@ func TestPost_GitlabMergeRequestInvalid(t *testing.T) {
 	responseContains(t, w, http.StatusBadRequest, "Error parsing webhook: err")
 }
 
-func TestPost_GithubPullRequestNotWhitelisted(t *testing.T) {
-	t.Log("when the event is a github pull request to a non-whitelisted repo we return a 400")
+func TestPost_GithubPullRequestNotAllowlisted(t *testing.T) {
+	t.Log("when the event is a github pull request to a non-allowlisted repo we return a 400")
 	e, v, _, _, _, _, _, _ := setup(t)
 	var err error
-	e.RepoWhitelistChecker, err = events.NewRepoWhitelistChecker("github.com/nevermatch")
+	e.RepoAllowlistChecker, err = events.NewRepoAllowlistChecker("github.com/nevermatch")
 	Ok(t, err)
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(nil))
 	req.Header.Set(githubHeader, "pull_request")
@@ -401,17 +401,17 @@ func TestPost_GithubPullRequestNotWhitelisted(t *testing.T) {
 	When(v.Validate(req, secret)).ThenReturn([]byte(event), nil)
 	w := httptest.NewRecorder()
 	e.Post(w, req)
-	responseContains(t, w, http.StatusForbidden, "Ignoring pull request event from non-whitelisted repo")
+	responseContains(t, w, http.StatusForbidden, "Ignoring pull request event from non-allowlisted repo")
 }
 
-func TestPost_GitlabMergeRequestNotWhitelisted(t *testing.T) {
-	t.Log("when the event is a gitlab merge request to a non-whitelisted repo we return a 400")
+func TestPost_GitlabMergeRequestNotAllowlisted(t *testing.T) {
+	t.Log("when the event is a gitlab merge request to a non-allowlisted repo we return a 400")
 	e, _, gl, p, _, _, _, _ := setup(t)
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(nil))
 	req.Header.Set(gitlabHeader, "value")
 
 	var err error
-	e.RepoWhitelistChecker, err = events.NewRepoWhitelistChecker("github.com/nevermatch")
+	e.RepoAllowlistChecker, err = events.NewRepoAllowlistChecker("github.com/nevermatch")
 	Ok(t, err)
 	When(gl.ParseAndValidate(req, secret)).ThenReturn(gitlab.MergeEvent{}, nil)
 	repo := models.Repo{}
@@ -420,7 +420,7 @@ func TestPost_GitlabMergeRequestNotWhitelisted(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	e.Post(w, req)
-	responseContains(t, w, http.StatusForbidden, "Ignoring pull request event from non-whitelisted repo")
+	responseContains(t, w, http.StatusForbidden, "Ignoring pull request event from non-allowlisted repo")
 }
 
 func TestPost_GithubPullRequestUnsupportedAction(t *testing.T) {
@@ -439,7 +439,7 @@ func TestPost_GithubPullRequestUnsupportedAction(t *testing.T) {
 
 func TestPost_GitlabMergeRequestUnsupportedAction(t *testing.T) {
 	t.Skip("relies too much on mocks, should use real event parser")
-	t.Log("when the event is a gitlab merge request to a non-whitelisted repo we return a 400")
+	t.Log("when the event is a gitlab merge request to a non-allowlisted repo we return a 400")
 	e, _, gl, p, _, _, _, _ := setup(t)
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(nil))
 	req.Header.Set(gitlabHeader, "value")
@@ -467,11 +467,12 @@ func TestPost_AzureDevopsPullRequestIgnoreEvent(t *testing.T) {
 	cr := emocks.NewMockCommandRunner()
 	c := emocks.NewMockPullCleaner()
 	vcsmock := vcsmocks.NewMockClient()
-	repoWhitelistChecker, err := events.NewRepoWhitelistChecker("*")
+	repoAllowlistChecker, err := events.NewRepoAllowlistChecker("*")
 	Ok(t, err)
 	e := server.EventsController{
 		TestingMode:                     true,
-		Logger:                          logging.NewNoopLogger(),
+		Logger:                          logging.NewNoopLogger(t),
+		ApplyDisabled:                   false,
 		AzureDevopsWebhookBasicUser:     user,
 		AzureDevopsWebhookBasicPassword: secret,
 		AzureDevopsRequestValidator:     v,
@@ -480,7 +481,7 @@ func TestPost_AzureDevopsPullRequestIgnoreEvent(t *testing.T) {
 		CommandRunner:                   cr,
 		PullCleaner:                     c,
 		SupportedVCSHosts:               []models.VCSHostType{models.AzureDevops},
-		RepoWhitelistChecker:            repoWhitelistChecker,
+		RepoAllowlistChecker:            repoAllowlistChecker,
 		VCSClient:                       vcsmock,
 	}
 
@@ -622,7 +623,7 @@ func TestPost_BBServerPullClosed(t *testing.T) {
 		t.Run(c.header, func(t *testing.T) {
 			RegisterMockTestingT(t)
 			pullCleaner := emocks.NewMockPullCleaner()
-			whitelist, err := events.NewRepoWhitelistChecker("*")
+			allowlist, err := events.NewRepoAllowlistChecker("*")
 			Ok(t, err)
 			ec := &server.EventsController{
 				PullCleaner: pullCleaner,
@@ -631,9 +632,10 @@ func TestPost_BBServerPullClosed(t *testing.T) {
 					BitbucketToken:     "bb-token",
 					BitbucketServerURL: "https://bbserver.com",
 				},
-				RepoWhitelistChecker: whitelist,
+				RepoAllowlistChecker: allowlist,
 				SupportedVCSHosts:    []models.VCSHostType{models.BitbucketServer},
 				VCSClient:            nil,
+				Logger:               logging.NewNoopLogger(t),
 			}
 
 			// Build HTTP request.
@@ -711,23 +713,27 @@ func TestPost_PullOpenedOrUpdated(t *testing.T) {
 		t.Run(c.Description, func(t *testing.T) {
 			e, v, gl, p, cr, _, _, _ := setup(t)
 			req, _ := http.NewRequest("GET", "", bytes.NewBuffer(nil))
+			var pullRequest models.PullRequest
+			var repo models.Repo
+
 			switch c.HostType {
 			case models.Gitlab:
 				req.Header.Set(gitlabHeader, "value")
 				var event gitlab.MergeEvent
 				event.ObjectAttributes.Action = c.Action
 				When(gl.ParseAndValidate(req, secret)).ThenReturn(event, nil)
-				repo := models.Repo{}
-				pullRequest := models.PullRequest{State: models.ClosedPullState}
+				repo = models.Repo{}
+				pullRequest = models.PullRequest{State: models.ClosedPullState}
 				When(p.ParseGitlabMergeRequestEvent(event)).ThenReturn(pullRequest, models.OpenedPullEvent, repo, repo, models.User{}, nil)
 			case models.Github:
 				req.Header.Set(githubHeader, "pull_request")
 				event := fmt.Sprintf(`{"action": "%s"}`, c.Action)
 				When(v.Validate(req, secret)).ThenReturn([]byte(event), nil)
-				repo := models.Repo{}
-				pull := models.PullRequest{State: models.ClosedPullState}
-				When(p.ParseGithubPullEvent(matchers.AnyPtrToGithubPullRequestEvent())).ThenReturn(pull, models.OpenedPullEvent, repo, repo, models.User{}, nil)
+				repo = models.Repo{}
+				pullRequest = models.PullRequest{State: models.ClosedPullState}
+				When(p.ParseGithubPullEvent(matchers.AnyPtrToGithubPullRequestEvent())).ThenReturn(pullRequest, models.OpenedPullEvent, repo, repo, models.User{}, nil)
 			}
+
 			w := httptest.NewRecorder()
 			e.Post(w, req)
 			responseContains(t, w, http.StatusOK, "Processing...")
@@ -745,11 +751,11 @@ func setup(t *testing.T) (server.EventsController, *mocks.MockGithubRequestValid
 	cr := emocks.NewMockCommandRunner()
 	c := emocks.NewMockPullCleaner()
 	vcsmock := vcsmocks.NewMockClient()
-	repoWhitelistChecker, err := events.NewRepoWhitelistChecker("*")
+	repoAllowlistChecker, err := events.NewRepoAllowlistChecker("*")
 	Ok(t, err)
 	e := server.EventsController{
 		TestingMode:                  true,
-		Logger:                       logging.NewNoopLogger(),
+		Logger:                       logging.NewNoopLogger(t),
 		GithubRequestValidator:       v,
 		Parser:                       p,
 		CommentParser:                cp,
@@ -759,7 +765,7 @@ func setup(t *testing.T) (server.EventsController, *mocks.MockGithubRequestValid
 		SupportedVCSHosts:            []models.VCSHostType{models.Github, models.Gitlab},
 		GitlabWebhookSecret:          secret,
 		GitlabRequestParserValidator: gl,
-		RepoWhitelistChecker:         repoWhitelistChecker,
+		RepoAllowlistChecker:         repoAllowlistChecker,
 		VCSClient:                    vcsmock,
 	}
 	return e, v, gl, p, cr, c, vcsmock, cp

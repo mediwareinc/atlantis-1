@@ -2,26 +2,21 @@ version: 2
 jobs:
   test:
     docker:
-    - image: runatlantis/testing-env:latest
-      environment:
-        GOFLAGS: "-mod=vendor"
+    - image: runatlantis/testing-env:20296f9638a4eca04733f60b39e1d3025b9d708a
     steps:
     - checkout
-    - run: make test-coverage
-    - run:
-        name: post coverage to codecov.io
-        command: bash <(curl -s https://codecov.io/bash)
+    - run: make test-all
     - run: make check-fmt
     - run: make check-lint
   e2e:
     docker:
-    - image: circleci/golang:1.14 # If you update this, update it in the Makefile too
+    - image: circleci/golang:1.16 # If you update this, update it in the Makefile too
       environment:
         # This version of TF will be downloaded before Atlantis is started.
         # We do this instead of setting --default-tf-version because setting
         # that flag starts the download asynchronously so we'd have a race
         # condition.
-        TERRAFORM_VERSION: 0.12.26
+        TERRAFORM_VERSION: 0.15.1
     steps:
     - checkout
     - run: make build-service
@@ -54,9 +49,7 @@ jobs:
   # Build and push 'latest' Docker tag.
   docker_master:
     docker:
-    - image: circleci/golang:1.14 # If you update this, update it in the Makefile too
-      environment:
-        GOFLAGS: "-mod=vendor"
+    - image: circleci/golang:1.16 # If you update this, update it in the Makefile too
     steps:
     - checkout
     - run: make build-service
@@ -77,9 +70,7 @@ jobs:
   # Build and push Docker tag.
   docker_tag:
     docker:
-    - image: circleci/golang:1.14 # If you update this, update it in the Makefile too
-      environment:
-        GOFLAGS: "-mod=vendor"
+    - image: circleci/golang:1.16 # If you update this, update it in the Makefile too
     steps:
     - checkout
     - run: make build-service
@@ -99,13 +90,19 @@ workflows:
     - test:
         filters:
           branches:
-            ignore: /.*-docs/
+            ignore: /docs\/./
     - e2e:
+        context:
+          - atlantis-e2e-tests
         requires: [test]
         filters:
           branches:
-            ignore: /.*-docs/
+            # Ignore fork PRs since they don't have access to
+            # the atlantis-e2e-tests context (and also doc PRs).
+            ignore: /(pull\/\d+)|(docs\/.*)/
     - docker_master:
+        context:
+          - docker-push
         requires: [e2e]
         filters:
           branches:
@@ -114,6 +111,8 @@ workflows:
   tag:
     jobs:
     - docker_tag:
+        context:
+          - docker-push
         filters:
           branches:
             ignore: /.*/

@@ -23,6 +23,9 @@ Terraform will perform the following actions:
 
 Plan: 1 to add, 0 to change, 0 to destroy.
 
+Changes to Outputs:
++ workspace = "default"
+
 postplan custom
 
 ```
@@ -33,6 +36,7 @@ postplan custom
 * :repeat: To **plan** this project again, comment:
     * `atlantis plan -d .`
 </details>
+Plan: 1 to add, 0 to change, 0 to destroy.
 
 ---
 ### 2. dir: `.` workspace: `staging`
@@ -55,6 +59,9 @@ Terraform will perform the following actions:
 
 Plan: 1 to add, 0 to change, 0 to destroy.
 
+Changes to Outputs:
++ workspace = "staging"
+
 ```
 
 * :arrow_forward: To **apply** this plan, comment:
@@ -63,7 +70,10 @@ Plan: 1 to add, 0 to change, 0 to destroy.
 * :repeat: To **plan** this project again, comment:
     * `atlantis plan -w staging`
 </details>
+Plan: 1 to add, 0 to change, 0 to destroy.
 
 ---
 * :fast_forward: To **apply** all unapplied plans from this pull request, comment:
     * `atlantis apply`
+* :put_litter_in_its_place: To delete all plans and locks for the PR, comment:
+    * `atlantis unlock`

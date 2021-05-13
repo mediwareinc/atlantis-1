@@ -204,6 +204,10 @@ Atlantis will need to have the `terragrunt` binary in its PATH.
 If you're using Docker you can build your own image, see [Customization](/docs/deployment.html#customization).
 :::
 
+If you don't want to create/manage the repo's `atlantis.yaml` file yourself, you can use the tool [terragrunt-atlantis-config](https://github.com/transcend-io/terragrunt-atlantis-config) to generate it.
+
+The `terragrunt-atlantis-config` tool is a community project and not maintained by the Atlantis team.
+
 ### Running custom commands
 Atlantis supports running completely custom commands. In this example, we want to run
 a script after every `apply`:
@@ -345,10 +349,12 @@ Or a custom command
   * `HEAD_REPO_NAME` - Name of the repository that is getting merged into the base repository, ex. `atlantis`.
   * `HEAD_REPO_OWNER` - Owner of the repository that is getting merged into the base repository, ex. `acme-corp`.
   * `HEAD_BRANCH_NAME` - Name of the head branch of the pull request (the branch that is getting merged into the base)
+  * `HEAD_COMMIT` - The sha256 that points to the head of the branch that is being pull requested into the base. If the pull request is from Bitbucket Cloud the string will only be 12 characters long because Bitbucket Cloud truncates its commit IDs.
   * `BASE_BRANCH_NAME` - Name of the base branch of the pull request (the branch that the pull request is getting merged into)
   * `PROJECT_NAME` - Name of the project configured in `atlantis.yaml`. If no project name is configured this will be an empty string.
   * `PULL_NUM` - Pull request number or ID, ex. `2`.
   * `PULL_AUTHOR` - Username of the pull request author, ex. `acme-user`.
+  * `REPO_REL_DIR` - The relative path of the project in the repository. For example if your project is in `dir1/dir2/` then this will be set to `"dir1/dir2"`. If your project is at the root this will be `"."`.
   * `USER_NAME` - Username of the VCS user running command, ex. `acme-user`. During an autoplan, the user will be the Atlantis API user, ex. `atlantis`.
   * `COMMENT_ARGS` - Any additional flags passed in the comment on the pull request. Flags are separated by commas and
   every character is escaped, ex. `atlantis plan -- arg1 arg2` will result in `COMMENT_ARGS=\a\r\g\1,\a\r\g\2`.

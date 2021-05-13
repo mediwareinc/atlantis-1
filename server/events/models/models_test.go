@@ -66,6 +66,19 @@ func TestNewRepo_CloneURLBitbucketServer(t *testing.T) {
 	}, repo)
 }
 
+// If the clone URL contains a space, NewRepo() should encode it
+func TestNewRepo_CloneURLContainsSpace(t *testing.T) {
+	repo, err := models.NewRepo(models.AzureDevops, "owner/project space/repo", "https://dev.azure.com/owner/project space/repo", "u", "p")
+	Ok(t, err)
+	Equals(t, repo.CloneURL, "https://u:p@dev.azure.com/owner/project%20space/repo")
+	Equals(t, repo.SanitizedCloneURL, "https://u:<redacted>@dev.azure.com/owner/project%20space/repo")
+
+	repo, err = models.NewRepo(models.BitbucketCloud, "owner/repo space", "https://bitbucket.org/owner/repo space", "u", "p")
+	Ok(t, err)
+	Equals(t, repo.CloneURL, "https://u:p@bitbucket.org/owner/repo%20space.git")
+	Equals(t, repo.SanitizedCloneURL, "https://u:<redacted>@bitbucket.org/owner/repo%20space.git")
+}
+
 func TestNewRepo_FullNameWrongFormat(t *testing.T) {
 	cases := []struct {
 		repoFullName string
@@ -354,6 +367,12 @@ func TestProjectResult_IsSuccessful(t *testing.T) {
 			},
 			true,
 		},
+		"policy_check success": {
+			models.ProjectResult{
+				PolicyCheckSuccess: &models.PolicyCheckSuccess{},
+			},
+			true,
+		},
 		"apply success": {
 			models.ProjectResult{
 				ApplySuccess: "success",
@@ -428,11 +447,91 @@ func TestProjectResult_PlanStatus(t *testing.T) {
 			},
 			expStatus: models.AppliedPlanStatus,
 		},
+		{
+			p: models.ProjectResult{
+				Command:            models.PolicyCheckCommand,
+				PolicyCheckSuccess: &models.PolicyCheckSuccess{},
+			},
+			expStatus: models.PassedPolicyCheckStatus,
+		},
+		{
+			p: models.ProjectResult{
+				Command: models.PolicyCheckCommand,
+				Failure: "failure",
+			},
+			expStatus: models.ErroredPolicyCheckStatus,
+		},
+		{
+			p: models.ProjectResult{
+				Command:            models.ApprovePoliciesCommand,
+				PolicyCheckSuccess: &models.PolicyCheckSuccess{},
+			},
+			expStatus: models.PassedPolicyCheckStatus,
+		},
+		{
+			p: models.ProjectResult{
+				Command: models.ApprovePoliciesCommand,
+				Failure: "failure",
+			},
+			expStatus: models.ErroredPolicyCheckStatus,
+		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.expStatus.String(), func(t *testing.T) {
 			Equals(t, c.expStatus, c.p.PlanStatus())
+		})
+	}
+}
+
+func TestPlanSuccess_Summary(t *testing.T) {
+	cases := []struct {
+		p         models.ProjectResult
+		expResult string
+	}{
+		{
+			p: models.ProjectResult{
+				PlanSuccess: &models.PlanSuccess{
+					TerraformOutput: `
+					An execution plan has been generated and is shown below.
+					Resource actions are indicated with the following symbols:
+					  - destroy
+
+					Terraform will perform the following actions:
+
+					  - null_resource.hi[1]
+
+
+					Plan: 0 to add, 0 to change, 1 to destroy.`,
+				},
+			},
+			expResult: "Plan: 0 to add, 0 to change, 1 to destroy.",
+		},
+		{
+			p: models.ProjectResult{
+				PlanSuccess: &models.PlanSuccess{
+					TerraformOutput: `
+					An execution plan has been generated and is shown below.
+					Resource actions are indicated with the following symbols:
+
+					No changes. Infrastructure is up-to-date.`,
+				},
+			},
+			expResult: "No changes. Infrastructure is up-to-date.",
+		},
+		{
+			p: models.ProjectResult{
+				PlanSuccess: &models.PlanSuccess{
+					TerraformOutput: `No match, expect empty`,
+				},
+			},
+			expResult: "",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.expResult, func(t *testing.T) {
+			Equals(t, c.expResult, c.p.PlanSuccess.Summary())
 		})
 	}
 }
@@ -452,6 +551,15 @@ func TestPullStatus_StatusCount(t *testing.T) {
 			{
 				Status: models.ErroredApplyStatus,
 			},
+			{
+				Status: models.DiscardedPlanStatus,
+			},
+			{
+				Status: models.ErroredPolicyCheckStatus,
+			},
+			{
+				Status: models.PassedPolicyCheckStatus,
+			},
 		},
 	}
 
@@ -459,4 +567,31 @@ func TestPullStatus_StatusCount(t *testing.T) {
 	Equals(t, 1, ps.StatusCount(models.AppliedPlanStatus))
 	Equals(t, 1, ps.StatusCount(models.ErroredApplyStatus))
 	Equals(t, 0, ps.StatusCount(models.ErroredPlanStatus))
+	Equals(t, 1, ps.StatusCount(models.DiscardedPlanStatus))
+	Equals(t, 1, ps.StatusCount(models.ErroredPolicyCheckStatus))
+	Equals(t, 1, ps.StatusCount(models.PassedPolicyCheckStatus))
+}
+
+func TestApplyCommand_String(t *testing.T) {
+	uc := models.ApplyCommand
+
+	Equals(t, "apply", uc.String())
+}
+
+func TestPlanCommand_String(t *testing.T) {
+	uc := models.PlanCommand
+
+	Equals(t, "plan", uc.String())
+}
+
+func TestPolicyCheckCommand_String(t *testing.T) {
+	uc := models.PolicyCheckCommand
+
+	Equals(t, "policy_check", uc.String())
+}
+
+func TestUnlockCommand_String(t *testing.T) {
+	uc := models.UnlockCommand
+
+	Equals(t, "unlock", uc.String())
 }

@@ -9,6 +9,7 @@ import (
 
 	version "github.com/hashicorp/go-version"
 	"github.com/runatlantis/atlantis/server/events/models"
+	"github.com/runatlantis/atlantis/server/logging"
 	gitlab "github.com/xanzy/go-gitlab"
 
 	. "github.com/runatlantis/atlantis/testing"
@@ -54,7 +55,8 @@ func TestNewGitlabClient_BaseURL(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.Hostname, func(t *testing.T) {
-			client, err := NewGitlabClient(c.Hostname, "token", nil)
+			log := logging.NewNoopLogger(t)
+			client, err := NewGitlabClient(c.Hostname, "token", log)
 			Ok(t, err)
 			Equals(t, c.ExpBaseURL, client.Client.BaseURL().String())
 		})
@@ -139,26 +141,31 @@ func TestGitlabClient_MergePull(t *testing.T) {
 					case "/api/v4/projects/runatlantis%2Fatlantis/merge_requests/1/merge":
 						w.WriteHeader(c.code)
 						w.Write([]byte(c.glResponse)) // nolint: errcheck
+					case "/api/v4/":
+						// Rate limiter requests.
+						w.WriteHeader(http.StatusOK)
 					default:
 						t.Errorf("got unexpected request at %q", r.RequestURI)
 						http.Error(w, "not found", http.StatusNotFound)
 					}
 				}))
 
-			internalClient := gitlab.NewClient(nil, "token")
-			Ok(t, internalClient.SetBaseURL(testServer.URL))
+			internalClient, err := gitlab.NewClient("token", gitlab.WithBaseURL(testServer.URL))
+			Ok(t, err)
 			client := &GitlabClient{
 				Client:  internalClient,
 				Version: nil,
 			}
 
-			err := client.MergePull(models.PullRequest{
+			err = client.MergePull(models.PullRequest{
 				Num: 1,
 				BaseRepo: models.Repo{
 					FullName: "runatlantis/atlantis",
 					Owner:    "runatlantis",
 					Name:     "atlantis",
 				},
+			}, models.PullRequestOptions{
+				DeleteSourceBranchOnMerge: false,
 			})
 			if c.expErr == "" {
 				Ok(t, err)
@@ -203,14 +210,17 @@ func TestGitlabClient_UpdateStatus(t *testing.T) {
 						Equals(t, exp, string(body))
 						defer r.Body.Close()  // nolint: errcheck
 						w.Write([]byte("{}")) // nolint: errcheck
+					case "/api/v4/":
+						// Rate limiter requests.
+						w.WriteHeader(http.StatusOK)
 					default:
 						t.Errorf("got unexpected request at %q", r.RequestURI)
 						http.Error(w, "not found", http.StatusNotFound)
 					}
 				}))
 
-			internalClient := gitlab.NewClient(nil, "token")
-			Ok(t, internalClient.SetBaseURL(testServer.URL))
+			internalClient, err := gitlab.NewClient("token", gitlab.WithBaseURL(testServer.URL))
+			Ok(t, err)
 			client := &GitlabClient{
 				Client:  internalClient,
 				Version: nil,
@@ -221,7 +231,7 @@ func TestGitlabClient_UpdateStatus(t *testing.T) {
 				Owner:    "runatlantis",
 				Name:     "atlantis",
 			}
-			err := client.UpdateStatus(repo, models.PullRequest{
+			err = client.UpdateStatus(repo, models.PullRequest{
 				Num:        1,
 				BaseRepo:   repo,
 				HeadCommit: "sha",

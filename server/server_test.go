@@ -20,19 +20,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/runatlantis/atlantis/server/events"
-	"github.com/runatlantis/atlantis/server/events/yaml/valid"
 
 	"github.com/gorilla/mux"
 	. "github.com/petergtz/pegomock"
 	"github.com/runatlantis/atlantis/server"
 	"github.com/runatlantis/atlantis/server/events/locking/mocks"
 	"github.com/runatlantis/atlantis/server/events/models"
+	"github.com/runatlantis/atlantis/server/logging"
 	sMocks "github.com/runatlantis/atlantis/server/mocks"
 	. "github.com/runatlantis/atlantis/testing"
 )
@@ -49,35 +46,6 @@ func TestNewServer(t *testing.T) {
 }
 
 // todo: test what happens if we set different flags. The generated config should be different.
-func TestRepoConfig(t *testing.T) {
-	t.SkipNow()
-	tmpDir, err := ioutil.TempDir("", "")
-	Ok(t, err)
-
-	repoYaml := `
-repos:
-- id: "https://github.com/runatlantis/atlantis"
-`
-	expConfig := valid.GlobalCfg{
-		Repos: []valid.Repo{
-			{
-				ID: "https://github.com/runatlantis/atlantis",
-			},
-		},
-		Workflows: map[string]valid.Workflow{},
-	}
-	repoFileLocation := filepath.Join(tmpDir, "repos.yaml")
-	err = ioutil.WriteFile(repoFileLocation, []byte(repoYaml), 0600)
-	Ok(t, err)
-
-	s, err := server.NewServer(server.UserConfig{
-		DataDir:     tmpDir,
-		RepoConfig:  repoFileLocation,
-		AtlantisURL: "http://example.com",
-	}, server.Config{})
-	Ok(t, err)
-	Equals(t, expConfig, s.CommandRunner.ProjectCommandBuilder.(*events.DefaultProjectCommandBuilder).GlobalCfg)
-}
 
 func TestNewServer_InvalidAtlantisURL(t *testing.T) {
 	tmpDir, err := ioutil.TempDir("", "")
@@ -109,6 +77,7 @@ func TestIndex_Success(t *testing.T) {
 	t.Log("Index should render the index template successfully.")
 	RegisterMockTestingT(t)
 	l := mocks.NewMockLocker()
+	al := mocks.NewMockApplyLocker()
 	// These are the locks that we expect to be rendered.
 	now := time.Now()
 	locks := map[string]models.ProjectLock{
@@ -133,15 +102,22 @@ func TestIndex_Success(t *testing.T) {
 	Ok(t, err)
 	s := server.Server{
 		Locker:          l,
+		ApplyLocker:     al,
 		IndexTemplate:   it,
 		Router:          r,
 		AtlantisVersion: atlantisVersion,
 		AtlantisURL:     u,
+		Logger:          logging.NewNoopLogger(t),
 	}
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(nil))
 	w := httptest.NewRecorder()
 	s.Index(w, req)
 	it.VerifyWasCalledOnce().Execute(w, server.IndexData{
+		ApplyLock: server.ApplyLockData{
+			Locked:        false,
+			Time:          time.Time{},
+			TimeFormatted: "01-01-0001 00:00:00",
+		},
 		Locks: []server.LockIndexData{
 			{
 				LockPath:      "/lock?id=lkysow%252Fatlantis-example%252F.%252Fdefault",
